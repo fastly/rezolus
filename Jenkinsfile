@@ -5,7 +5,7 @@ final def BUILD_TIMEOUT = 120
 final def NODELABEL = 'docker-build'
 final def RELEASE_BRANCH = 'main'
 
-def releaseBranches = [RELEASE_BRANCH, 'origin/' + RELEASE_BRANCH, 'thom-jenkins', 'origin/thom-jenkins']
+def releaseBranches = [RELEASE_BRANCH, 'origin/' + RELEASE_BRANCH]
 def cache = true
 def cleanMergedRefs = false
 def pushDeb = false
