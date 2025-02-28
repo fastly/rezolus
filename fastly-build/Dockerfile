@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
   && apt-get -qy clean \
   && rm -rf /var/lib/apt/lists/*
 
-RUN cargo deb --deb-version $PKG_VERSION --output $DESTDIR
+RUN cargo deb --deb-version $PKG_VERSION --output $DESTDIR --profile release
 
 FROM gcr.io/distroless/cc-debian11
 WORKDIR /
