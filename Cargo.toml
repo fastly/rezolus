@@ -1,6 +1,6 @@
 [package]
 name = "rezolus"
-version = "5.0.0-alpha.2"
+version = "5.0.0-alpha.5"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 description = "High resolution systems performance telemetry agent"
@@ -28,7 +28,7 @@ libc = "0.2.158"
 linkme = "0.3.28"
 memmap2 = "0.9.4"
 metriken = "0.7.0"
-metriken-exposition = "0.10.0"
+metriken-exposition = "0.12.2"
 ouroboros = "0.18.4"
 parking_lot = "0.12.3"
 reqwest = { version = "0.12.9", default-features = false, features = ["blocking"] }

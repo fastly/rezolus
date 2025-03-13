@@ -1,18 +1,17 @@
 use crate::common::*;
-use crate::debug;
-use crate::{Arc, Config, Sampler};
+use crate::{debug, Arc, Config, Sampler};
+
 use axum::extract::State;
 use axum::routing::get;
 use axum::Router;
 use metriken::{RwLockHistogram, Value};
-use std::time::Instant;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, decompression::RequestDecompressionLayer};
 
-mod snapshot;
+use std::time::{Instant, SystemTime};
 
-use snapshot::Snapshot;
+mod snapshot;
 
 struct AppState {
     config: Arc<Config>,
@@ -61,19 +60,22 @@ fn app(state: Arc<AppState>) -> Router {
 }
 
 async fn msgpack(State(state): State<Arc<AppState>>) -> Vec<u8> {
+    let timestamp = SystemTime::now();
+    let start = Instant::now();
+
     state.refresh().await;
 
-    let snapshot = Snapshot::new();
+    let snapshot = snapshot::create(timestamp, start.elapsed());
 
     rmp_serde::encode::to_vec(&snapshot).expect("failed to serialize snapshot")
 }
 
 async fn prometheus(State(state): State<Arc<AppState>>) -> String {
-    state.refresh().await;
-
     let timestamp = clocksource::precise::UnixInstant::EPOCH
         .elapsed()
         .as_millis();
+
+    state.refresh().await;
 
     let mut data = Vec::new();
 
