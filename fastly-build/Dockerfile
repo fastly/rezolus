@@ -1,4 +1,4 @@
-FROM container-registry.secretcdn.net/fastly/focal-rust:1.84.0 AS builder
+FROM container-registry.secretcdn.net/fastly/focal-rust:1.85.0 AS builder
 
 ARG DESTDIR
 ARG PKG_VERSION
