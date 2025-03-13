@@ -314,13 +314,14 @@ pub fn run(config: Config) {
             let _ = destination.set_len(0);
 
             // handle any output format specific transforms
+            //
+            // note: as the idx is the position we will write to next, it is
+            //       also the position to start reading from
             match config.format {
                 Format::Raw => {
                     debug!("capturing ringbuffer and writing to raw");
 
-                    for offset in 1..=snapshot_count {
-                        // we start at the last recorded index + 1 to get the oldest
-                        // record first
+                    for offset in 0..snapshot_count {
                         let mut i = idx + offset;
 
                         // handle wrap-around in the ring-buffer
@@ -380,9 +381,7 @@ pub fn run(config: Config) {
                         }
                     };
 
-                    for offset in 1..=snapshot_count {
-                        // we start at the last recorded index + 1 to get the oldest
-                        // record first
+                    for offset in 0..snapshot_count {
                         let mut i = idx + offset;
 
                         // handle wrap-around in the ring-buffer
@@ -417,6 +416,10 @@ pub fn run(config: Config) {
                     let _ = packed.rewind();
 
                     if let Err(e) = MsgpackToParquet::with_options(ParquetOptions::new())
+                        .metadata(
+                            "sampling_interval_ms".to_string(),
+                            config.interval.as_millis().to_string(),
+                        )
                         .convert_file_handle(packed, &destination)
                     {
                         eprintln!("error saving parquet file: {e}");
