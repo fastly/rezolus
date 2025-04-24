@@ -1,26 +1,32 @@
-use crate::debug;
+use crate::Format;
 
+use clap::ArgMatches;
 use ringlog::Level;
 use serde::Deserialize;
 
-use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 mod general;
 mod log;
-mod sampler;
 
 use general::General;
 use log::Log;
-use sampler::Sampler as SamplerConfig;
 
-fn enabled() -> bool {
-    true
+fn source() -> String {
+    "0.0.0.0:4241".into()
 }
 
-fn listen() -> String {
-    "0.0.0.0:4241".into()
+fn interval() -> String {
+    "1s".into()
+}
+
+fn output() -> String {
+    "/tmp/rezolus.parquet".into()
+}
+
+fn parquet() -> Format {
+    Format::Parquet
 }
 
 #[derive(Deserialize, Default)]
@@ -29,10 +35,23 @@ pub struct Config {
     general: General,
     #[serde(default)]
     log: Log,
-    #[serde(default)]
-    defaults: SamplerConfig,
-    #[serde(default)]
-    samplers: HashMap<String, SamplerConfig>,
+}
+
+impl TryFrom<ArgMatches> for Config {
+    type Error = String;
+
+    fn try_from(
+        args: ArgMatches,
+    ) -> Result<Self, <Self as std::convert::TryFrom<clap::ArgMatches>>::Error> {
+        let config: PathBuf = args.get_one::<PathBuf>("CONFIG").unwrap().to_path_buf();
+        match Config::load(&config) {
+            Ok(c) => Ok(c),
+            Err(error) => {
+                eprintln!("error loading config file: {:?}\n{error}", config);
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 impl Config {
@@ -53,12 +72,6 @@ impl Config {
 
         config.general.check();
 
-        config.defaults.check("default");
-
-        for (name, config) in config.samplers.iter() {
-            config.check(name);
-        }
-
         Ok(config)
     }
 
@@ -68,21 +81,5 @@ impl Config {
 
     pub fn general(&self) -> &General {
         &self.general
-    }
-
-    pub fn enabled(&self, name: &str) -> bool {
-        let enabled = self
-            .samplers
-            .get(name)
-            .and_then(|v| v.enabled())
-            .unwrap_or(self.defaults.enabled().unwrap_or(enabled()));
-
-        if enabled {
-            debug!("'{name}' sampler is enabled");
-        } else {
-            debug!("'{name}' sampler is not enabled");
-        }
-
-        enabled
     }
 }
