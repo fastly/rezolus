@@ -3,8 +3,7 @@ use backtrace::Backtrace;
 use clap::{value_parser, Command, ValueEnum};
 use linkme::distributed_slice;
 use metriken_exposition::{MsgpackToParquet, ParquetOptions};
-use reqwest::blocking::Client;
-use reqwest::Url;
+use reqwest::{Client, Url};
 use ringlog::*;
 use serde::Deserialize;
 use tempfile::tempfile_in;
@@ -21,6 +20,7 @@ mod agent;
 mod exporter;
 mod hindsight;
 mod recorder;
+mod viewer;
 
 mod common;
 
@@ -63,6 +63,7 @@ fn main() {
         .subcommand(exporter::command())
         .subcommand(hindsight::command())
         .subcommand(recorder::command())
+        .subcommand(viewer::command())
         .get_matches();
 
     match cli.subcommand() {
@@ -85,6 +86,11 @@ fn main() {
             let config = recorder::Config::try_from(args.clone()).expect("failed to configure");
 
             recorder::run(config)
+        }
+        Some(("view", args)) => {
+            let config = viewer::Config::try_from(args.clone()).expect("failed to configure");
+
+            viewer::run(config)
         }
         _ => {
             unimplemented!()
