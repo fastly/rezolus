@@ -4,30 +4,16 @@ use axum::extract::State;
 use axum::routing::get;
 use axum::Router;
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, decompression::RequestDecompressionLayer};
 
-use std::time::{Instant, SystemTime};
-
 mod snapshot;
 
-struct AppState {
-    samplers: Arc<Box<[Box<dyn Sampler>]>>,
-}
-
-impl AppState {
-    async fn refresh(&self) {
-        let s: Vec<_> = self.samplers.iter().map(|s| s.refresh()).collect();
-
-        let start = Instant::now();
-        futures::future::join_all(s).await;
-        let duration = start.elapsed().as_micros();
-        debug!("sampling latency: {duration} us");
-    }
-}
+use snapshot::SnapshotBuilder;
 
 pub async fn serve(config: Arc<Config>, samplers: Arc<Box<[Box<dyn Sampler>]>>) {
-    let state = Arc::new(AppState { samplers });
+    let state = Arc::new(Mutex::new(SnapshotBuilder::new(config.clone(), samplers)));
 
     let app: Router = app(state);
 
@@ -40,10 +26,11 @@ pub async fn serve(config: Arc<Config>, samplers: Arc<Box<[Box<dyn Sampler>]>>) 
         .expect("failed to run http server");
 }
 
-fn app(state: Arc<AppState>) -> Router {
+fn app(state: Arc<Mutex<SnapshotBuilder>>) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/metrics/binary", get(msgpack))
+        .route("/metrics/json", get(json))
         .with_state(state)
         .layer(
             ServiceBuilder::new()
@@ -52,15 +39,22 @@ fn app(state: Arc<AppState>) -> Router {
         )
 }
 
-async fn msgpack(State(state): State<Arc<AppState>>) -> Vec<u8> {
-    let timestamp = SystemTime::now();
-    let start = Instant::now();
+async fn msgpack(State(state): State<Arc<Mutex<SnapshotBuilder>>>) -> Vec<u8> {
+    let now = Instant::now();
 
-    state.refresh().await;
-
-    let snapshot = snapshot::create(timestamp, start.elapsed());
+    let mut snapshot_builder = state.lock().await;
+    let snapshot = snapshot_builder.build(now).await;
 
     rmp_serde::encode::to_vec(&snapshot).expect("failed to serialize snapshot")
+}
+
+async fn json(State(state): State<Arc<Mutex<SnapshotBuilder>>>) -> String {
+    let now = Instant::now();
+
+    let mut snapshot_builder = state.lock().await;
+    let snapshot = snapshot_builder.build(now).await;
+
+    serde_json::to_string(&snapshot).expect("failed to serialize snapshot")
 }
 
 async fn root() -> String {

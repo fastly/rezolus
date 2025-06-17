@@ -1,4 +1,10 @@
-## [Unreleased]
+## [5.0.1] - 2024-06-13
+
+### Fixed
+
+- Rezolus Viewer served a 404 instead of using embedded index html. (#550)
+
+## [5.0.0] - 2025-06-11
 
 ### Changed
 
@@ -14,6 +20,7 @@
 - Prometheus exposition moved out into a separate service. (#470)
 
 ### Added
+
 - Recorder extended with additional options. (#387 #389)
 - Hindsight recorder for always-on ringbuffer recording. (#409 #436 )
 - Per-cgroup syscalls. (#419)
@@ -21,10 +28,19 @@
 - SoftIRQ time tracked by IRQ kind. (#462)
 - Sampler for TLB flush events. (#467)
 - Softnet sampler for understanding kernel packet processing. (#480)
-- Additional syscall groups. (#482)
+- Additional syscall groups. (#482 #503)
 - CPU CFS throttling metrics for cgroups. (#488)
 - CPU L3 Cache Hit/Access (AMD Zen only). (#487)
 - CPU Migrations. (#491)
+- Rezolus Viewer for opening parquet files. (#530)
+- JSON endpoint for Rezolus Agent. (#532)
+- BPF program stats. (#533)
+- Per-sampler latency logging. (#535)
+
+### Fixed
+
+- Set open file limit for agent sufficiently high for large systems. (#511)
+- Changed recorder missed tick behavior from burst to skip. (#513)
 
 ## [4.1.2] - 2024-11-25
 
@@ -365,7 +381,9 @@
 - Rewritten implementation of Rezolus using libbpf-rs and perf-event2 to provide
   a more modern approach to BPF and Perf Event instrumentation. 
 
-[unreleased]: https://github.com/iopsystems/rezolus/compare/v4.1.2...HEAD
+[unreleased]: https://github.com/iopsystems/rezolus/compare/v5.0.1...HEAD
+[5.0.1]: https://github.com/iopsystems/rezolus/compare/v5.0.0...v5.0.1
+[5.0.0]: https://github.com/iopsystems/rezolus/compare/v4.1.2...v5.0.0
 [4.1.2]: https://github.com/iopsystems/rezolus/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/iopsystems/rezolus/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/iopsystems/rezolus/compare/v4.0.0...v4.1.0
