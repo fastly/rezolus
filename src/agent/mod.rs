@@ -9,13 +9,16 @@ use config::Config;
 use samplers::{Sampler, SamplerResult, SAMPLERS};
 
 #[allow(unused_imports)]
-use metrics::{CounterGroup, CounterGroupError, GaugeGroup, GaugeGroupError};
+use metrics::{CounterGroup, CounterGroupError, GaugeGroup, GaugeGroupError, MetricGroup};
 
 #[cfg(target_os = "linux")]
 mod bpf;
 
 #[cfg(target_os = "linux")]
 use bpf::*;
+
+#[cfg(target_os = "linux")]
+pub use bpf::{process_cgroup_info, CgroupInfo};
 
 /// Runs Rezolus in `agent` mode in which it gathers systems telemetry and
 /// exposes metrics on an OTel/Prometheus compatible endpoint and a
@@ -34,6 +37,10 @@ pub fn run(config: PathBuf) {
             }
         }
     };
+
+    // configure scheduler
+    #[cfg(target_os = "linux")]
+    config.scheduler().apply();
 
     // configure debug log
     let debug_output: Box<dyn Output> = Box::new(Stderr::new());
