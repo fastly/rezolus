@@ -4,7 +4,7 @@
 // This BPF program tracks CPU migrations using software events.
 
 #include <vmlinux.h>
-#include "../../../agent/bpf/cgroup_info.h"
+#include "../../../agent/bpf/cgroup.h"
 #include "../../../agent/bpf/helpers.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
@@ -12,9 +12,7 @@
 
 #define COUNTER_GROUP_WIDTH 8
 #define MAX_CPUS 1024
-#define MAX_CGROUPS 4096
 #define MAX_PID 4194304
-#define RINGBUF_CAPACITY 262144
 
 #define FROM 0
 #define TO 1
@@ -45,7 +43,7 @@ struct {
     __uint(map_flags, BPF_F_MMAPABLE);
     __type(key, u32);
     __type(value, u64);
-    __uint(max_entries, MAX_CPUS * COUNTER_GROUP_WIDTH);
+    __uint(max_entries, MAX_CPUS* COUNTER_GROUP_WIDTH);
 } migrations SEC(".maps");
 
 // per-cgroup migration counts
@@ -61,16 +59,15 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, MAX_PID);
-    __type(key, u32);  // pid
+    __type(key, u32);   // pid
     __type(value, u32); // cpu
 } last_cpu SEC(".maps");
 
 SEC("tp_btf/sched_switch")
-int handle__sched_switch(u64 *ctx)
-{
+int handle__sched_switch(u64* ctx) {
     /* TP_PROTO(bool preempt, struct task_struct *prev, struct task_struct *next) */
-    struct task_struct *prev = (struct task_struct *)ctx[1];
-    struct task_struct *next = (struct task_struct *)ctx[2];
+    struct task_struct* prev = (struct task_struct*)ctx[1];
+    struct task_struct* next = (struct task_struct*)ctx[2];
 
     u32 cpu = bpf_get_smp_processor_id();
     u32 prev_pid = BPF_CORE_READ(prev, pid);
@@ -82,7 +79,7 @@ int handle__sched_switch(u64 *ctx)
     }
 
     // find the last cpu the task ran on
-    u32 *last_cpu_ptr = bpf_map_lookup_elem(&last_cpu, &next_pid);
+    u32* last_cpu_ptr = bpf_map_lookup_elem(&last_cpu, &next_pid);
 
     // check the ptr and that the last cpu is known (it is stored one-indexed)
     if (last_cpu_ptr && *last_cpu_ptr) {
@@ -103,34 +100,13 @@ int handle__sched_switch(u64 *ctx)
                 int cgroup_id = BPF_CORE_READ(next, sched_task_group, css.id);
                 u64 serial_nr = BPF_CORE_READ(next, sched_task_group, css.serial_nr);
 
-                if (cgroup_id && cgroup_id < MAX_CGROUPS) {
-                    // Check if this is a new cgroup by checking the serial number
-                    u64 *elem = bpf_map_lookup_elem(&cgroup_serial_numbers, &cgroup_id);
+                if (cgroup_id < MAX_CGROUPS) {
+                    int ret = handle_new_cgroup(next, &cgroup_serial_numbers, &cgroup_info);
 
-                    if (elem && *elem != serial_nr) {
-                        // Zero the counter, it will not be exported until non-zero
+                    if (ret == 0) {
+                        // New cgroup detected, zero the counter
                         u64 zero = 0;
                         bpf_map_update_elem(&cgroup_cpu_migrations, &cgroup_id, &zero, BPF_ANY);
-
-                        // Initialize the cgroup info
-                        struct cgroup_info cginfo = {
-                            .id = cgroup_id,
-                            .level = BPF_CORE_READ(next, sched_task_group, css.cgroup, level),
-                        };
-
-                        // Read the cgroup name hierarchy
-                        bpf_probe_read_kernel_str(&cginfo.name, CGROUP_NAME_LEN,
-                            BPF_CORE_READ(next, sched_task_group, css.cgroup, kn, name));
-                        bpf_probe_read_kernel_str(&cginfo.pname, CGROUP_NAME_LEN,
-                            BPF_CORE_READ(next, sched_task_group, css.cgroup, kn, parent, name));
-                        bpf_probe_read_kernel_str(&cginfo.gpname, CGROUP_NAME_LEN,
-                            BPF_CORE_READ(next, sched_task_group, css.cgroup, kn, parent, parent, name));
-
-                        // Push the cgroup info into the ringbuf
-                        bpf_ringbuf_output(&cgroup_info, &cginfo, sizeof(cginfo), 0);
-
-                        // Update the serial number in the local map
-                        bpf_map_update_elem(&cgroup_serial_numbers, &cgroup_id, &serial_nr, BPF_ANY);
                     }
 
                     // Increment the per-cgroup counter

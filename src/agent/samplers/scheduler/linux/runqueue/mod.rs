@@ -24,13 +24,26 @@ use crate::agent::*;
 
 use std::sync::Arc;
 
+unsafe impl plain::Plain for bpf::types::cgroup_info {}
+impl_cgroup_info!(bpf::types::cgroup_info);
+
+static CGROUP_METRICS: &[&dyn MetricGroup] = &[
+    &CGROUP_SCHEDULER_IVCSW,
+    &CGROUP_SCHEDULER_OFFCPU,
+    &CGROUP_SCHEDULER_RUNQUEUE_WAIT,
+];
+
+fn handle_cgroup_info(data: &[u8]) -> i32 {
+    process_cgroup_info::<bpf::types::cgroup_info>(data, CGROUP_METRICS)
+}
+
 #[distributed_slice(SAMPLERS)]
 fn init(config: Arc<Config>) -> SamplerResult {
     if !config.enabled(NAME) {
         return Ok(None);
     }
 
-    let counters = vec![&SCHEDULER_IVCSW];
+    let counters = vec![&SCHEDULER_IVCSW, &SCHEDULER_RUNQUEUE_WAIT];
 
     let bpf = BpfBuilder::new(
         NAME,
@@ -40,10 +53,14 @@ fn init(config: Arc<Config>) -> SamplerResult {
         },
         ModSkelBuilder::default,
     )
-    .counters("counters", counters)
+    .cpu_counters("counters", counters)
     .histogram("runqlat", &SCHEDULER_RUNQUEUE_LATENCY)
     .histogram("running", &SCHEDULER_RUNNING)
     .histogram("offcpu", &SCHEDULER_OFFCPU)
+    .packed_counters("cgroup_runq_wait", &CGROUP_SCHEDULER_RUNQUEUE_WAIT)
+    .packed_counters("cgroup_offcpu", &CGROUP_SCHEDULER_OFFCPU)
+    .packed_counters("cgroup_ivcsw", &CGROUP_SCHEDULER_IVCSW)
+    .ringbuf_handler("cgroup_info", handle_cgroup_info)
     .build()?;
 
     Ok(Some(Box::new(bpf)))
@@ -56,6 +73,10 @@ impl SkelExt for ModSkel<'_> {
             "offcpu" => &self.maps.offcpu,
             "running" => &self.maps.running,
             "runqlat" => &self.maps.runqlat,
+            "cgroup_runq_wait" => &self.maps.cgroup_runq_wait,
+            "cgroup_offcpu" => &self.maps.cgroup_offcpu,
+            "cgroup_ivcsw" => &self.maps.cgroup_ivcsw,
+            "cgroup_info" => &self.maps.cgroup_info,
             _ => unimplemented!(),
         }
     }
